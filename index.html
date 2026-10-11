@@ -28,36 +28,25 @@
     const SRC = 'https://d2qh3gh0k5vp3v.cloudfront.net/v1/manifest/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-n6pess5lwbghr/9e019606-f999-49d5-9a51-c0c3201aee4c/0.m3u8';
     const video = document.getElementById('video');
     let hls = null;
-    let playing = false;
-
-    function goFullscreen() {
-      try {
-        const el = document.documentElement;
-        if (document.fullscreenElement || document.webkitFullscreenElement) return;
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
-      } catch (e) {}
-    }
+    let started = false;
 
     function startPlay() {
-      if (playing) return;
-      playing = true;
+      if (started) return;
+      started = true;
 
       video.muted = true;
       video.volume = 1;
 
       video.play().then(() => {
-        setTimeout(() => { video.muted = false; }, 200);
+        setTimeout(() => { video.muted = false; }, 300);
       }).catch(() => {
         setTimeout(() => {
           video.muted = true;
-          video.play().then(() => { video.muted = false; }).catch(() => {});
+          video.play().then(() => {
+            video.muted = false;
+          }).catch(() => {});
         }, 500);
       });
-
-      setTimeout(goFullscreen, 5000);
     }
 
     function init() {
@@ -66,7 +55,7 @@
         video.addEventListener('loadedmetadata', startPlay);
         video.addEventListener('canplay', startPlay);
         video.addEventListener('error', loadHls);
-        setTimeout(startPlay, 1000);
+        setTimeout(startPlay, 800);
         return;
       }
       loadHls();
@@ -99,15 +88,14 @@
       });
     }
 
-    function onUserAction() {
+    function unmute() {
       video.muted = false;
       video.volume = 1;
       video.play().catch(() => {});
-      goFullscreen();
     }
-    ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(evt => {
-      document.addEventListener(evt, onUserAction, { once: true, passive: true });
-    });
+    document.addEventListener('click', unmute, { once: true });
+    document.addEventListener('touchstart', unmute, { once: true });
+    document.addEventListener('keydown', unmute, { once: true });
 
     init();
   </script>
