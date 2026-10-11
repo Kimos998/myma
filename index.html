@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Live</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    #fs-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      color: #fff;
+      font-size: 16px;
+      padding: 10px 24px;
+      border-radius: 24px;
+      cursor: pointer;
+      z-index: 15;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-family: system-ui, sans-serif;
+    }
+    body:hover #fs-btn { opacity: 1; }
+  </style>
+</head>
+<body>
+  <video id="video" controls autoplay muted playsinline webkit-playsinline></video>
+  <button id="fs-btn">⛶ ملء الشاشة</button>
+
+  <script>
+    const SRC = 'https://d2qh3gh0k5vp3v.cloudfront.net/v1/manifest/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-n6pess5lwbghr/9e019606-f999-49d5-9a51-c0c3201aee4c/0.m3u8';
+    const video = document.getElementById('video');
+    const fsBtn = document.getElementById('fs-btn');
+    let hls = null;
+
+    function play() {
+      video.muted = true;
+      video.play().then(() => {
+        setTimeout(() => { video.muted = false; }, 500);
+      }).catch(() => {});
+    }
+
+    function init() {
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = SRC;
+        video.addEventListener('loadedmetadata', play);
+        video.addEventListener('error', tryHls);
+        return;
+      }
+      tryHls();
+    }
+
+    function tryHls() {
+      if (typeof Hls === 'undefined' || !Hls.isSupported()) return;
+      if (hls) hls.destroy();
+
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 60,
+        maxBufferLength: 30
+      });
+
+      hls.loadSource(SRC);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, play);
+
+      hls.on(Hls.Events.ERROR, (e, data) => {
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+          else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        }
+      });
+    }
+
+    fsBtn.addEventListener('click', () => {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+        fsBtn.textContent = '⛶ تصغير';
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        fsBtn.textContent = '⛶ ملء الشاشة';
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
