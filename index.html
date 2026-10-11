@@ -12,7 +12,6 @@
       height: 100%;
       background: #000;
       overflow: hidden;
-      font-family: Arial, sans-serif;
     }
     #video {
       width: 100%;
@@ -20,162 +19,96 @@
       object-fit: contain;
       background: #000;
     }
-    #error {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.9);
-      color: #fff;
-      padding: 20px 40px;
-      border-radius: 8px;
-      text-align: center;
-      display: none;
-      z-index: 1000;
-      border: 2px solid #ff4444;
-    }
   </style>
 </head>
 <body>
-  <video id="video" autoplay muted playsinline webkit-playsinline></video>
-  <div id="error"></div>
+  <video id="video" controls autoplay playsinline webkit-playsinline></video>
 
   <script>
     const SRC = 'https://d2qh3gh0k5vp3v.cloudfront.net/v1/manifest/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-n6pess5lwbghr/9e019606-f999-49d5-9a51-c0c3201aee4c/0.m3u8';
     const video = document.getElementById('video');
-    const errorDiv = document.getElementById('error');
     let hls = null;
-    let retryCount = 0;
-    const MAX_RETRIES = 5;
+    let started = false;
 
-    function showError(message) {
-      errorDiv.textContent = message;
-      errorDiv.style.display = 'block';
-      setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
+    function forcePlayWithSound() {
+      video.muted = false;
+      video.volume = 1.0;
+
+      const promise = video.play();
+      if (promise !== undefined) {
+        promise.then(() => {
+          started = true;
+        }).catch(() => {
+          video.muted = true;
+          video.play().then(() => {
+            started = true;
+            setTimeout(() => { video.muted = false; video.volume = 1.0; }, 100);
+            setTimeout(() => { video.muted = false; video.volume = 1.0; }, 500);
+            setTimeout(() => { video.muted = false; video.volume = 1.0; }, 1500);
+          }).catch(() => {});
+        });
+      }
     }
 
-    function startPlay() {
-      console.log('Starting playback...');
-      
-      video.muted = false; // تشغيل الصوت مباشرة
-      video.volume = 1;
-
-      const playPromise = video.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log('Video playing with sound');
-            retryCount = 0;
-          })
-          .catch((error) => {
-            console.error('Play error:', error);
-            // إعادة المحاولة مع كتم الصوت أولاً ثم تشغيله
-            setTimeout(() => {
-              video.muted = true;
-              video.play()
-                .then(() => {
-                  console.log('Playing with muted, now unmuting...');
-                  setTimeout(() => {
-                    video.muted = false;
-                    retryCount = 0;
-                  }, 500);
-                })
-                .catch(() => {
-                  showError('فشل تشغيل الفيديو');
-                });
-            }, 500);
-          });
-      }
+    function start() {
+      if (started) return;
+      forcePlayWithSound();
     }
 
     function init() {
-      console.log('Initializing player...');
-      
-      // التحقق من دعم HLS الأصلي (Safari)
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        console.log('Using native HLS support');
         video.src = SRC;
-        video.addEventListener('loadedmetadata', startPlay);
-        video.addEventListener('canplay', startPlay);
+        video.addEventListener('loadedmetadata', start);
+        video.addEventListener('canplay', start);
         video.addEventListener('error', loadHls);
-        startPlay();
+        setTimeout(start, 600);
+        setTimeout(start, 1500);
         return;
       }
-      
       loadHls();
     }
 
     function loadHls() {
-      console.log('Loading HLS.js...');
-      
-      if (typeof Hls === 'undefined' || !Hls.isSupported()) {
-        showError('المتصفح لا يدعم بث الفيديو');
-        return;
-      }
-      
+      if (typeof Hls === 'undefined' || !Hls.isSupported()) return;
       if (hls) hls.destroy();
 
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
         backBufferLength: 60,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        autoStartLoad: true
+        maxBufferLength: 30
       });
 
       hls.loadSource(SRC);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('Manifest parsed');
-        startPlay();
-      });
-
-      hls.on(Hls.Events.LEVEL_LOADED, () => {
-        console.log('Level loaded');
-        startPlay();
-      });
-
-      hls.on(Hls.Events.BUFFER_APPENDED, () => {
-        if (video.paused) {
-          startPlay();
-        }
+      hls.on(Hls.Events.MANIFEST_PARSED, start);
+      hls.on(Hls.Events.LEVEL_LOADED, start);
+      hls.on(Hls.Events.FRAG_LOADED, () => {
+        if (!started) start();
       });
 
       hls.on(Hls.Events.ERROR, (e, data) => {
-        console.error('HLS Error:', data);
-        
         if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              if (retryCount < MAX_RETRIES) {
-                retryCount++;
-                console.log(`محاولة ${retryCount}/${MAX_RETRIES}`);
-                setTimeout(() => {
-                  if (hls) hls.startLoad();
-                }, 1500);
-              } else {
-                showError('خطأ في الاتصال - تحقق من الإنترنت');
-              }
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              showError('حدث خطأ أثناء التشغيل');
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setTimeout(() => hls.startLoad(), 1200);
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
           }
         }
       });
     }
 
-    // بدء التشغيل فوراً عند تحميل الصفحة
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
-    } else {
-      init();
+    function ensureSound() {
+      video.muted = false;
+      video.volume = 1.0;
+      video.play().catch(() => {});
     }
+    ['click', 'touchstart', 'keydown', 'pointerdown', 'mousedown'].forEach(function(evt) {
+      document.addEventListener(evt, ensureSound, { once: false, passive: true });
+    });
+
+    init();
   </script>
 </body>
 </html>
